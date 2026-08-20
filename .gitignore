@@ -1,0 +1,26 @@
+# Secrets
+.env
+.env.*
+*.secret
+*.key
+*.pem
+
+# Zsh secrets
+zsh/secrets.zsh
+
+# Logs
+*.log
+
+# Cache
+.cache/
+cache/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Vim
+*.swp
+*.swo
+*~
+

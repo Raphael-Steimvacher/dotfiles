@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+umask 077
+
+readonly CONFIG_FILE="${HOME}/.config/cold-backup/config.env"
+readonly EXCLUDES_FILE="${HOME}/.config/cold-backup/excludes.txt"
+readonly LOG_DIR="${HOME}/.local/state/cold-backup"
+
+show_progress=false
+if [[ -t 1 ]]; then
+  show_progress=true
+fi
+readonly show_progress
+
+mkdir -p -- "$LOG_DIR"
+readonly RUN_TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+readonly LOG_FILE="${LOG_DIR}/cold-backup-${RUN_TIMESTAMP}-${$}.log"
+exec > >(tee -a -- "$LOG_FILE") 2>&1
+
+exit_report() {
+  local exit_status=$?
+
+  if (( exit_status != 0 )); then
+    printf '\nERRO: o backup foi interrompido (código %d).\n' "$exit_status"
+    printf 'Log: %s\n' "$LOG_FILE"
+  fi
+}
+trap exit_report EXIT
+
+usage() {
+  printf 'Uso: %s [--dry-run]\n' "${0##*/}"
+}
+
+dry_run=false
+case "${1:-}" in
+  "") ;;
+  --dry-run) dry_run=true ;;
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    printf 'Opção desconhecida: %s\n' "$1" >&2
+    exit 2
+    ;;
+esac
+
+if (( $# > 1 )); then
+  usage >&2
+  exit 2
+fi
+
+if [[ ! -r "$CONFIG_FILE" ]]; then
+  printf 'Arquivo de configuração ausente ou ilegível: %s\n' "$CONFIG_FILE" >&2
+  exit 1
+fi
+
+# O gerenciador do systemd normalmente define USER; esta garantia também
+# mantém o config.env funcional em ambientes mínimos.
+if [[ -z "${USER:-}" ]]; then
+  USER="$(id -un)"
+  export USER
+fi
+
+# O arquivo é local, pertence ao usuário e contém somente a configuração do backup.
+# shellcheck disable=SC1090
+source "$CONFIG_FILE"
+
+: "${SOURCE:?SOURCE não foi definida em $CONFIG_FILE}"
+: "${COLD_MOUNT:?COLD_MOUNT não foi definida em $CONFIG_FILE}"
+: "${COLD_UUID:?COLD_UUID não foi definida em $CONFIG_FILE}"
+: "${DESTINATION:?DESTINATION não foi definida em $CONFIG_FILE}"
+
+if [[ ! -r "$EXCLUDES_FILE" ]]; then
+  printf 'Arquivo de exclusões ausente ou ilegível: %s\n' "$EXCLUDES_FILE" >&2
+  exit 1
+fi
+
+for required_command in rsync mountpoint findmnt realpath sync tee; do
+  if ! command -v "$required_command" >/dev/null 2>&1; then
+    printf 'Comando obrigatório não encontrado: %s\n' "$required_command" >&2
+    exit 127
+  fi
+done
+
+source_path="$(realpath -e -- "$SOURCE")"
+cold_mount_path="$(realpath -e -- "$COLD_MOUNT")"
+destination_path="$(realpath -m -- "$DESTINATION")"
+
+if ! mountpoint -q -- "$cold_mount_path"; then
+  printf 'Cold Storage não está montado em: %s\n' "$cold_mount_path" >&2
+  printf 'Nenhum dado será gravado no destino.\n' >&2
+  exit 1
+fi
+
+mounted_uuid="$(findmnt -rn -M "$cold_mount_path" -o UUID)"
+if [[ "$mounted_uuid" != "$COLD_UUID" ]]; then
+  printf 'O filesystem montado não é o HD esperado.\n' >&2
+  printf 'UUID esperado: %s\n' "$COLD_UUID" >&2
+  printf 'UUID encontrado: %s\n' "${mounted_uuid:-<nenhum>}" >&2
+  exit 1
+fi
+
+case "${destination_path}/" in
+  "${cold_mount_path}/"*) ;;
+  *)
+    printf 'Destino inseguro: %s não está dentro de %s\n' \
+      "$destination_path" "$cold_mount_path" >&2
+    exit 1
+    ;;
+esac
+
+case "${cold_mount_path}/" in
+  "${source_path}/"*)
+    printf 'Configuração insegura: o Cold Storage está dentro da origem.\n' >&2
+    exit 1
+    ;;
+esac
+
+# Em um backup real, o destino só é criado depois da confirmação do ponto de
+# montagem e do UUID. O dry-run não cria nem mesmo esse diretório.
+if [[ "$dry_run" == false ]]; then
+  mkdir -p -- "$destination_path"
+fi
+
+rsync_options=(
+  --archive
+  --human-readable
+  --partial
+  --stats
+  --itemize-changes
+  --exclude-from="$EXCLUDES_FILE"
+)
+
+if [[ "$show_progress" == true ]]; then
+  rsync_options+=(--info=progress2)
+fi
+
+if [[ "$dry_run" == true ]]; then
+  rsync_options+=(--dry-run)
+fi
+
+printf '========================================\n'
+printf 'Cold Backup iniciado em: %s\n' "$(date --iso-8601=seconds)"
+printf 'Modo: %s\n' "$([[ "$dry_run" == true ]] && printf 'TESTE (dry-run)' || printf 'BACKUP REAL')"
+printf 'Origem: %s/\n' "$source_path"
+printf 'Destino: %s/\n' "$destination_path"
+printf 'Exclusões: %s\n' "$EXCLUDES_FILE"
+printf 'Log: %s\n' "$LOG_FILE"
+printf '========================================\n'
+
+set +e
+rsync "${rsync_options[@]}" -- "$source_path/" "$destination_path/"
+rsync_status=$?
+set -e
+
+if (( rsync_status != 0 )); then
+  printf '\nERRO: rsync terminou com o código %d.\n' "$rsync_status" >&2
+  exit "$rsync_status"
+fi
+
+if [[ "$dry_run" == true ]]; then
+  printf '\nTeste concluído com sucesso. Nenhum arquivo foi copiado.\n'
+else
+  printf '\nRsync concluído. Sincronizando buffers do sistema...\n'
+  sync
+  printf 'Backup concluído com sucesso.\n'
+fi
+
+printf 'Log: %s\n' "$LOG_FILE"
