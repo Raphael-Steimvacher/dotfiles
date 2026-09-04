@@ -56,15 +56,15 @@ _icloud_validar_sessao() {
   local remote="icloud:"
   local ponto="$NUVENS_DIR/icloud"
   local output
-  local status
+  local http_status
 
   echo "🔎 Verificando sessão do iCloud..."
 
   output=$(rclone lsd "$remote" 2>&1)
-  status=$?
+  http_status=$?
 
   # Sessão funcionando normalmente
-  if (( status == 0 )); then
+  if (( http_status == 0 )); then
     echo "✅ Sessão do iCloud válida."
     return 0
   fi
@@ -144,9 +144,9 @@ _icloud_validar_sessao() {
     echo "🔎 Testando nova sessão do iCloud..."
 
     output=$(rclone lsd "$remote" 2>&1)
-    status=$?
+    http_status=$?
 
-    if (( status != 0 )); then
+    if (( http_status != 0 )); then
 
       echo ""
       echo "❌ A nova autenticação do iCloud não funcionou."
