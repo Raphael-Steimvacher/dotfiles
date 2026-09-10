@@ -14,6 +14,15 @@ alias gps='git push'
 alias gpl='git pull'
 alias gft='git fetch'
 alias gmr='git merge'
+alias gb='git branch'
+
+# Gita
+alias gtll='gita ll'
+alias gtft='gita fetch'
+alias gtpl='gita super pull origin'
+alias gtc='gita super checkout'
+alias gtbc='gita super checkout -b'
+alias gtb='gita super branch'
 
 # Configuração do Zsh
 alias zshconfig='vim ~/.zshrc'
