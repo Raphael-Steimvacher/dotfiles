@@ -15,6 +15,8 @@ alias gpl='git pull'
 alias gft='git fetch'
 alias gmr='git merge'
 alias gb='git branch'
+alias gc='git checkout'
+alias gcb='git checkout -b'
 
 # Gita
 alias gtll='gita ll'
