@@ -25,6 +25,7 @@ alias gtpl='gita super pull origin'
 alias gtc='gita super checkout'
 alias gtbc='gita super checkout -b'
 alias gtb='gita super branch'
+alias gtst='gita super status'
 
 # Configuração do Zsh
 alias zshconfig='vim ~/.zshrc'
