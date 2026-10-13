@@ -18,6 +18,7 @@ alias gmr='git merge'
 alias gb='git branch'
 alias gc='git checkout'
 alias gcb='git checkout -b'
+alias gbg='git Branch -r| grep'
 
 # Gita
 alias gtll='gita ll'
@@ -27,6 +28,7 @@ alias gtc='gita super checkout'
 alias gtbc='gita super checkout -b'
 alias gtb='gita super branch'
 alias gtpso='gita super push -u origin HEAD'
+alias gtbg='gita super Branch -r| grep'
 
 # Configuração do Zsh
 alias zshconfig='vim ~/.zshrc'
